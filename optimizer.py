@@ -1,7 +1,6 @@
 import re
 import json
-import streamlit as st
-from anthropic import Anthropic
+import subprocess
 
 MODEL = "claude-sonnet-5"
 
@@ -28,25 +27,17 @@ Score the CV against the job description and return ONLY valid JSON in this exac
   "feedback": ["specific issue 1", "specific issue 2"]
 }
 
-Be strict. feedback should list concrete things missing or weak. If total_score >= 97, feedback should be empty list."""
-
-
-def get_client():
-    api_key = st.secrets.get("ANTHROPIC_API_KEY") or st.secrets.get("anthropic", {}).get("api_key")
-    if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY not set in Streamlit secrets.")
-    return Anthropic(api_key=api_key)
+Be strict. If total_score >= 97, feedback should be empty list."""
 
 
 def call_claude(system: str, prompt: str) -> str:
-    client = get_client()
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=4000,
-        system=system,
-        messages=[{"role": "user", "content": prompt}]
+    result = subprocess.run(
+        ["claude", "-p", prompt, "--system-prompt", system, "--model", MODEL],
+        capture_output=True,
+        text=True,
+        timeout=120
     )
-    return response.content[0].text.strip()
+    return result.stdout.strip()
 
 
 def score_cv(cv: str, jd: str) -> dict:
@@ -59,7 +50,7 @@ def score_cv(cv: str, jd: str) -> dict:
         except json.JSONDecodeError:
             pass
     return {"total_score": 50, "keyword_match": 50, "experience_relevance": 50,
-            "seniority_fit": 50, "language_alignment": 50, "feedback": ["Could not parse score"]}
+            "seniority_fit": 50, "language_alignment": 50, "feedback": []}
 
 
 def optimize_cv(cv: str, jd: str, feedback: list = None) -> str:
@@ -77,27 +68,34 @@ def optimize_cv(cv: str, jd: str, feedback: list = None) -> str:
 
 
 def run_optimizer(cv: str, jd: str, target: int = 97, max_loops: int = 4):
-    yield {"step": "scoring_original", "message": "Scoring your original CV..."}
-    original_score = score_cv(cv, jd)
-    yield {"step": "original_scored", "score": original_score}
+    """Yields status dicts so the caller can send Telegram updates."""
 
-    yield {"step": "optimizing", "message": "Rewriting CV for this job description...", "attempt": 1}
+    yield {"step": "status", "message": "📊 Scoring your original CV..."}
+    original_score = score_cv(cv, jd)
+    yield {"step": "status", "message": f"📊 Original score: *{original_score['total_score']}%*"}
+
+    yield {"step": "status", "message": "✍️ Rewriting CV for this role..."}
     optimized = optimize_cv(cv, jd)
 
     final_score = None
     for attempt in range(1, max_loops + 1):
-        yield {"step": "scoring_optimized", "message": f"Scoring optimized CV (attempt {attempt})...", "attempt": attempt}
+        yield {"step": "status", "message": f"🔍 Scoring optimized CV \\(attempt {attempt}\\)\\.\\.\\."}
         score = score_cv(optimized, jd)
         final_score = score
         total = score.get("total_score", 0)
-        yield {"step": "attempt_result", "score": score, "attempt": attempt, "cv": optimized}
 
         if total >= target:
+            yield {"step": "status", "message": f"✅ Target reached: *{total}%*"}
             break
 
         if attempt < max_loops:
             feedback = score.get("feedback", [])
-            yield {"step": "refining", "message": f"Score {total}% — refining ({len(feedback)} issues)...", "attempt": attempt + 1}
+            yield {"step": "status", "message": f"⚡ Score {total}% — refining \\({len(feedback)} issues\\)\\.\\.\\."}
             optimized = optimize_cv(cv, jd, feedback)
 
-    yield {"step": "done", "optimized_cv": optimized, "final_score": final_score, "original_score": original_score}
+    yield {
+        "step": "done",
+        "optimized_cv": optimized,
+        "final_score": final_score,
+        "original_score": original_score
+    }
