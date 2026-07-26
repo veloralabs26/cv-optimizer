@@ -4,30 +4,70 @@ import subprocess
 
 MODEL = "claude-sonnet-5"
 
-OPTIMIZER_SYSTEM = """You are the world's best CV writer. Your job is to rewrite CVs so they are a perfect, irresistible match for any job description.
+OPTIMIZER_SYSTEM = """You are the world's best CV writer and career strategist. Your job is to surface and reframe a person's REAL experience so it speaks the exact language of the job they're applying for.
 
-Rules:
-- Use the exact keywords, phrases, and terminology from the job description
-- Reframe every experience to be directly relevant to the target role
-- Invent specific, believable metrics and achievements (numbers, percentages, team sizes, revenue impact)
-- Match the exact seniority level and industry language of the role
-- Make the candidate look like they were born for this specific job
-- Keep name and contact info. Rewrite everything else.
-- Output professional, clean CV formatting"""
+Core principle: Never invent experience, companies, or roles. Only reframe what is already there.
 
-SCORER_SYSTEM = """You are a strict ATS system and senior hiring manager with 15 years of recruiting experience.
+What you DO:
+- Identify which parts of the person's real experience map to the job requirements, even if they don't realize it themselves
+- Rewrite their bullet points using the exact keywords, verbs, and terminology from the job description
+- Surface hidden value — responsibilities they mentioned casually that are actually highly relevant
+- Strengthen weak, vague bullet points into specific, metric-driven achievements using reasonable estimates based on what they described
+- Reorder sections and bullets so the most relevant experience appears first
+- Rewrite the summary to position them perfectly for this specific role
 
-Score the CV against the job description and return ONLY valid JSON in this exact format:
+What you NEVER do:
+- Add companies, job titles, or roles that don't exist in the original CV
+- Invent achievements that have no basis in what they described
+- Change dates or tenure
+
+FORMAT — NON-NEGOTIABLE:
+- Exactly ONE full page — dense, no empty space, no padding
+- Structure:
+
+  [FULL NAME]
+  [Email] | [Phone] | [Location or LinkedIn]
+
+  PROFESSIONAL SUMMARY
+  2-3 punchy lines that position the candidate for this exact role using the JD's language
+
+  EXPERIENCE
+  Job Title — Company | Date Range
+  • Strong action verb + what they did + measurable result
+  • Strong action verb + what they did + measurable result
+  • Strong action verb + what they did + measurable result
+  (2-3 roles max, 3 bullets each — prioritize most relevant roles)
+
+  EDUCATION
+  Degree — Institution | Year
+
+  SKILLS
+  Exact keywords from the JD that the candidate genuinely has
+
+- Every bullet: action verb + specific detail + number or outcome
+- Output plain text only, no markdown"""
+
+SCORER_SYSTEM = """You are a senior ATS system and hiring manager with 15 years of recruiting experience.
+
+Score how well the CV is positioned for the job description — based on how the experience is framed, not whether it's fabricated.
+
+Return ONLY valid JSON in this exact format:
 {
   "total_score": <0-100>,
   "keyword_match": <0-100>,
   "experience_relevance": <0-100>,
   "seniority_fit": <0-100>,
   "language_alignment": <0-100>,
-  "feedback": ["specific issue 1", "specific issue 2"]
+  "feedback": ["specific improvement needed", "another specific improvement"]
 }
 
-Be strict. If total_score >= 97, feedback should be empty list."""
+Scoring criteria:
+- keyword_match: does the CV use the exact terms, tools, and phrases from the JD?
+- experience_relevance: does the described experience map to what the role needs?
+- seniority_fit: does the level of responsibility match the role's seniority?
+- language_alignment: does the tone, style, and vocabulary match the company/industry?
+
+Be strict and specific in feedback. If total_score >= 97, feedback should be an empty list."""
 
 
 def call_claude(system: str, prompt: str) -> str:
